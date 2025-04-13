@@ -1,3 +1,5 @@
+# rag.py
+
 import io
 import re
 import json
@@ -73,26 +75,23 @@ def embed_chunks(_all_chunks):
 @st.cache_resource
 def initialize_index():
     try:
-        parts = PINECONE_ENVIRONMENT.split("-")
-        if len(parts) != 3:
-            raise ValueError("Invalid PINECONE_ENVIRONMENT format. Expected format like 'us-east1-aws'")
-
-        region = "-".join(parts[:2])  # 'us-east1'
-        cloud = parts[2]              # 'aws'
-
+        # Check if index already exists
         existing_indexes = [idx.name for idx in pc.list_indexes()]
         if PINECONE_INDEX in existing_indexes:
-            print(f"Using existing Pinecone index: '{PINECONE_INDEX}'")
-        else:
-            print(f"Creating Pinecone index: '{PINECONE_INDEX}' in {region} ({cloud})")
-            pc.create_index(
-                name=PINECONE_INDEX,
-                dimension=768,
-                metric="cosine",
-                spec=ServerlessSpec(cloud=cloud, region=region)
-            )
-            print(f"Index '{PINECONE_INDEX}' created successfully.")
+            print(f"Index '{PINECONE_INDEX}' already exists. Deleting it.")
+            pc.delete_index(PINECONE_INDEX)
 
+        print(f"Creating index '{PINECONE_INDEX}' in environment '{PINECONE_ENVIRONMENT}'.")
+        pc.create_index(
+            name=PINECONE_INDEX,
+            dimension=768,
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",  # or "gcp" based on your region
+                region=PINECONE_ENVIRONMENT
+            )
+        )
+        print(f"Index '{PINECONE_INDEX}' created successfully.")
         return pc.Index(PINECONE_INDEX)
 
     except Exception as e:
@@ -115,7 +114,6 @@ def upsert_to_pinecone(embedded_chunks):
                 for chunk in batch
             ]
             index.upsert(vectors=vectors)
-
         print("Upsert successful!")
         return index
 
