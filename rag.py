@@ -10,7 +10,7 @@ import streamlit as st
 import google.generativeai as genai
 from pinecone import ServerlessSpec
 
-from config import AZURE_CONNECTION_STRING, AZURE_CONTAINER_NAME, PINECONE_INDEX, pc
+from config import AZURE_CONNECTION_STRING, AZURE_CONTAINER_NAME, PINECONE_INDEX, PINECONE_ENVIRONMENT, pc
 
 
 @st.cache_resource
@@ -72,32 +72,32 @@ def embed_chunks(_all_chunks):
 
 @st.cache_resource
 def initialize_index():
-    # Hardcoding cloud and region values
-    cloud = "aws"  # Or "gcp" depending on your Pinecone region
-    region = "us-west1"  # Set your Pinecone region here (e.g., us-west1, eu-central1, etc.)
-
     try:
-        # Check if the index already exists and delete it if necessary
+        parts = PINECONE_ENVIRONMENT.split("-")
+        if len(parts) != 3:
+            raise ValueError("Invalid PINECONE_ENVIRONMENT format. Expected format like 'us-east1-aws'")
+
+        region = "-".join(parts[:2])  # 'us-east1'
+        cloud = parts[2]              # 'aws'
+
         existing_indexes = [idx.name for idx in pc.list_indexes()]
         if PINECONE_INDEX in existing_indexes:
-            print(f"Index '{PINECONE_INDEX}' already exists. Deleting it.")
-            pc.delete_index(PINECONE_INDEX)
+            print(f"Using existing Pinecone index: '{PINECONE_INDEX}'")
+        else:
+            print(f"Creating Pinecone index: '{PINECONE_INDEX}' in {region} ({cloud})")
+            pc.create_index(
+                name=PINECONE_INDEX,
+                dimension=768,
+                metric="cosine",
+                spec=ServerlessSpec(cloud=cloud, region=region)
+            )
+            print(f"Index '{PINECONE_INDEX}' created successfully.")
 
-        # Create the Pinecone index with the correct cloud and region values
-        print(f"Creating index '{PINECONE_INDEX}' in region {region} and cloud {cloud}.")
-        pc.create_index(
-            name=PINECONE_INDEX,
-            dimension=768,
-            metric="cosine",
-            spec=ServerlessSpec(cloud=cloud, region=region)
-        )
-
-        print(f"Index '{PINECONE_INDEX}' created successfully.")
         return pc.Index(PINECONE_INDEX)
 
     except Exception as e:
         print(f"Error while initializing Pinecone index: {str(e)}")
-        raise e  # Re-raise the exception to see it in the logs
+        raise e
 
 
 @st.cache_resource
@@ -115,13 +115,13 @@ def upsert_to_pinecone(embedded_chunks):
                 for chunk in batch
             ]
             index.upsert(vectors=vectors)
-        
+
         print("Upsert successful!")
         return index
 
     except Exception as e:
         print(f"Error while upserting to Pinecone: {str(e)}")
-        raise e  # Re-raise the exception for logging purposes
+        raise e
 
 
 def calculate_metrics(retrieved_texts, correct_answer, model_answer):
