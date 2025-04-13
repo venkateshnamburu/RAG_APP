@@ -1,5 +1,3 @@
-# rag.py
-
 import io
 import re
 import json
@@ -74,14 +72,22 @@ def embed_chunks(_all_chunks):
 
 @st.cache_resource
 def initialize_index():
+    # Hardcoding cloud and region values
+    cloud = "aws"  # or "gcp" depending on your Pinecone region
+    region = "us-west1"  # Set your Pinecone region here (e.g., us-west1, eu-central1, etc.)
+
+    # Check if the index already exists and delete it if it does
     if PINECONE_INDEX in [idx.name for idx in pc.list_indexes()]:
         pc.delete_index(PINECONE_INDEX)
+        
+    # Create the Pinecone index with the correct cloud and region values
     pc.create_index(
         name=PINECONE_INDEX,
         dimension=768,
         metric="cosine",
-        spec=ServerlessSpec(cloud="aws", region=pc.environment)
+        spec=ServerlessSpec(cloud=cloud, region=region)
     )
+    
     return pc.Index(PINECONE_INDEX)
 
 
