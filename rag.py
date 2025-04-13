@@ -73,39 +73,55 @@ def embed_chunks(_all_chunks):
 @st.cache_resource
 def initialize_index():
     # Hardcoding cloud and region values
-    cloud = "aws"  # or "gcp" depending on your Pinecone region
+    cloud = "aws"  # Or "gcp" depending on your Pinecone region
     region = "us-west1"  # Set your Pinecone region here (e.g., us-west1, eu-central1, etc.)
 
-    # Check if the index already exists and delete it if it does
-    if PINECONE_INDEX in [idx.name for idx in pc.list_indexes()]:
-        pc.delete_index(PINECONE_INDEX)
-        
-    # Create the Pinecone index with the correct cloud and region values
-    pc.create_index(
-        name=PINECONE_INDEX,
-        dimension=768,
-        metric="cosine",
-        spec=ServerlessSpec(cloud=cloud, region=region)
-    )
-    
-    return pc.Index(PINECONE_INDEX)
+    try:
+        # Check if the index already exists and delete it if necessary
+        existing_indexes = [idx.name for idx in pc.list_indexes()]
+        if PINECONE_INDEX in existing_indexes:
+            print(f"Index '{PINECONE_INDEX}' already exists. Deleting it.")
+            pc.delete_index(PINECONE_INDEX)
+
+        # Create the Pinecone index with the correct cloud and region values
+        print(f"Creating index '{PINECONE_INDEX}' in region {region} and cloud {cloud}.")
+        pc.create_index(
+            name=PINECONE_INDEX,
+            dimension=768,
+            metric="cosine",
+            spec=ServerlessSpec(cloud=cloud, region=region)
+        )
+
+        print(f"Index '{PINECONE_INDEX}' created successfully.")
+        return pc.Index(PINECONE_INDEX)
+
+    except Exception as e:
+        print(f"Error while initializing Pinecone index: {str(e)}")
+        raise e  # Re-raise the exception to see it in the logs
 
 
 @st.cache_resource
 def upsert_to_pinecone(embedded_chunks):
-    index = initialize_index()
-    for i in tqdm(range(0, len(embedded_chunks), 100)):
-        batch = embedded_chunks[i:i + 100]
-        vectors = [
-            {
-                "id": chunk["id"],
-                "values": chunk["embedding"],
-                "metadata": {"text": chunk["text"], **chunk["metadata"]}
-            }
-            for chunk in batch
-        ]
-        index.upsert(vectors=vectors)
-    return index
+    try:
+        index = initialize_index()
+        for i in tqdm(range(0, len(embedded_chunks), 100)):
+            batch = embedded_chunks[i:i + 100]
+            vectors = [
+                {
+                    "id": chunk["id"],
+                    "values": chunk["embedding"],
+                    "metadata": {"text": chunk["text"], **chunk["metadata"]}
+                }
+                for chunk in batch
+            ]
+            index.upsert(vectors=vectors)
+        
+        print("Upsert successful!")
+        return index
+
+    except Exception as e:
+        print(f"Error while upserting to Pinecone: {str(e)}")
+        raise e  # Re-raise the exception for logging purposes
 
 
 def calculate_metrics(retrieved_texts, correct_answer, model_answer):
